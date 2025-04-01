@@ -1,0 +1,127 @@
+import mediapipe as mp
+import cv2
+import pyautogui
+import numpy as np
+import time
+
+# Initialize MediaPipe and OpenCV
+mp_drawing = mp.solutions.drawing_utils
+mp_hands = mp.solutions.hands
+
+# Capture webcam
+cap = cv2.VideoCapture(0)
+screen_w, screen_h = pyautogui.size()  # Get screen size
+
+# Variables for smoothing
+prev_x, prev_y = 0, 0
+smooth_factor = 0.3 # Lower = Smoother movement
+
+# Click handling
+threshould = 20  # Distance for cursor move 
+click_threshold = 30  # Distance for pinch to click
+click_cooldown = 0.3  # 300ms cooldown between clicks
+last_click_time = 0
+
+# Scrolling Variables
+scroll_sensitivity = 1  # Adjust scrolling speed
+prev_scroll_y = None  # To store the previous y-coordinate for scrolling
+
+with mp_hands.Hands(
+    static_image_mode=False,
+    max_num_hands=1,
+    min_detection_confidence=0.7,
+    min_tracking_confidence=0.7
+) as hands:
+
+    while True:
+        ret, frame = cap.read()
+        frame = cv2.flip(frame, 1)  # Flip horizontally for mirror effect
+        frame_h, frame_w, _ = frame.shape
+
+        # Process the frame
+        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        results = hands.process(rgb_frame)
+
+        if results.multi_hand_landmarks:
+            for hand_landmarks in results.multi_hand_landmarks:
+                # Draw hand landmarks
+                mp_drawing.draw_landmarks(frame, hand_landmarks, mp_hands.HAND_CONNECTIONS)
+
+                # Get Index Finger & Thumb Position
+                index_finger = hand_landmarks.landmark[8]
+                thumb = hand_landmarks.landmark[4]
+                arm=hand_landmarks.landmark[13]
+                
+                # Convert to screen coordinates
+                x, y = int(index_finger.x * frame_w), int(index_finger.y * frame_h)
+                
+               
+               
+               
+               # Move the cursor
+                if np.linalg.norm([int(arm.x * frame_w) - int(thumb.x * frame_w), int(arm.y * frame_h) - int(thumb.y * frame_h)]) < threshould:
+                    
+                    screen_x = int(index_finger.x * screen_w)
+                    screen_y = int(index_finger.y * screen_h)
+                
+                     # Apply cursor smoothing
+                    smooth_x = int(prev_x + (screen_x - prev_x) * smooth_factor)
+                    smooth_y = int(prev_y + (screen_y - prev_y) * smooth_factor)
+                    prev_x, prev_y = smooth_x, smooth_y  # Update previous position
+                    
+                    pyautogui.moveTo(smooth_x, smooth_y)
+
+
+
+
+                # Detect pinch (for left click)
+                thumb_x, thumb_y = int(thumb.x * frame_w), int(thumb.y * frame_h)
+                distance = np.linalg.norm([x - thumb_x, y - thumb_y])  # Euclidean distance
+
+                if distance < click_threshold:
+                    current_time = time.time()
+                    if current_time - last_click_time > click_cooldown:  # Debounce clicks
+                        pyautogui.click()
+                        last_click_time = current_time
+                        cv2.putText(frame, "Click!", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+                 
+                 
+               
+               
+                # Right Click (if middle finger is close to palm)
+                middle_tip = hand_landmarks.landmark[12]
+                middle_x, middle_y = int(middle_tip.x * frame_w), int(middle_tip.y * frame_h)
+
+                if np.linalg.norm([middle_x - thumb_x, middle_y - thumb_y]) < click_threshold:
+                    pyautogui.rightClick()
+                    cv2.putText(frame, "Right Click!", (x, y - 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+                 
+                 
+                 
+                #Scrolling Gesture: Thumb & ring finger Touch + Index Movement
+                ring_tip = hand_landmarks.landmark[16]
+                ring_x, ring_y = int(ring_tip.x * frame_w), int(ring_tip.y * frame_h)
+
+                ring_thumb_distance = np.linalg.norm([thumb_x - ring_x, thumb_y - ring_y])
+                if ring_thumb_distance < click_threshold:  # Ensure thumb and pinky are touching
+                    if prev_scroll_y is not None:
+                        scroll_amount = (y - prev_scroll_y) * scroll_sensitivity
+                        pyautogui.scroll(-scroll_amount)
+
+                    prev_scroll_y = y  # Update previous scroll position
+                else:
+                    prev_scroll_y = None  # Reset when thumb & pinky aren't touching
+
+
+
+
+        # Show the frame
+        cv2.imshow("Virtual Mouse", frame)
+        key = cv2.waitKey(1) & 0xFF
+
+        if key == ord("q"):
+            break
+
+# Release resources
+cap.release()
+cv2.destroyAllWindows()
