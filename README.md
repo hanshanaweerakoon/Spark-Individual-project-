@@ -11,6 +11,11 @@ Control your computer mouse using hand gestures via webcam using:
 - Right click using thumb + middle finger
 - Scroll using thumb + ring finger and index movement
 
+## Demo Video
+
+Watch the demo [here](https://dms.uom.lk/s/5zbfLfiT64DHRcj)
+
+
 ## Requirements
 ```bash
 pip install mediapipe opencv-python pyautogui numpy
